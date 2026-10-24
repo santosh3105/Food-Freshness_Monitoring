@@ -1,7 +1,17 @@
 
-"""MongoDB Atlas connection and collection helpers."""
+"""
+MongoDB Atlas connection and collection helpers.
+
+Designed for:
+- Local development
+- Vercel serverless deployment
+- MongoDB Atlas
+- Safe TLS certificate verification
+- Database index initialization
+"""
 
 import logging
+import os
 import time
 from typing import Optional
 
@@ -23,9 +33,30 @@ db = None
 
 CONNECTION_ATTEMPTS = 3
 RETRY_DELAY_SECONDS = 1
-SERVER_SELECTION_TIMEOUT_MS = 3000
-CONNECT_TIMEOUT_MS = 3000
-SOCKET_TIMEOUT_MS = 5000
+
+SERVER_SELECTION_TIMEOUT_MS = 5000
+CONNECT_TIMEOUT_MS = 5000
+SOCKET_TIMEOUT_MS = 10000
+
+
+# ============================================================
+# ENVIRONMENT HELPERS
+# ============================================================
+
+def _is_vercel_environment() -> bool:
+    """Return True when running in the Vercel environment."""
+    return bool(os.getenv("VERCEL"))
+
+
+def _is_local_mongodb(uri: str) -> bool:
+    """Identify a MongoDB URI pointing to a local development server."""
+    uri = uri.lower()
+
+    return (
+        "127.0.0.1" in uri
+        or "localhost" in uri
+        or "mongodb://mongo:" in uri
+    )
 
 
 # ============================================================
@@ -33,11 +64,24 @@ SOCKET_TIMEOUT_MS = 5000
 # ============================================================
 
 def connect_to_mongo() -> bool:
-    """Connect to MongoDB using the configured application settings."""
+    """
+    Connect to MongoDB using application settings.
+
+    On Vercel, a missing or unreachable Atlas connection never
+    triggers a fallback to localhost.
+
+    Returns:
+        True if the database connection succeeds.
+        False if the connection cannot be established.
+    """
     global client, db
 
     mongo_uri = getattr(settings, "MONGO_URI", None)
     database_name = getattr(settings, "DATABASE_NAME", None)
+
+    # --------------------------------------------------------
+    # Validate configuration
+    # --------------------------------------------------------
 
     if not mongo_uri or not str(mongo_uri).strip():
         logger.error("MONGO_URI is not configured.")
@@ -50,194 +94,200 @@ def connect_to_mongo() -> bool:
     mongo_uri = str(mongo_uri).strip()
     database_name = str(database_name).strip()
 
-    # Reuse an existing healthy connection.
+    if not mongo_uri.startswith(("mongodb://", "mongodb+srv://")):
+        logger.error(
+            "Invalid MongoDB URI scheme. Expected mongodb:// "
+            "or mongodb+srv://."
+        )
+        return False
+
+    # Prevent accidental local database use in production.
+    if _is_vercel_environment() and _is_local_mongodb(mongo_uri):
+        logger.error(
+            "Production configuration points to local MongoDB. "
+            "Set MONGO_URI to your MongoDB Atlas connection string "
+            "in Vercel Environment Variables."
+        )
+        return False
+
+    # --------------------------------------------------------
+    # Reuse a healthy existing connection
+    # --------------------------------------------------------
+
     if client is not None and db is not None:
         try:
             client.admin.command("ping")
             logger.debug("Existing MongoDB connection is healthy.")
             return True
+
         except PyMongoError:
             logger.warning(
-                "Existing MongoDB connection is unavailable. Reconnecting."
+                "Existing MongoDB connection is unavailable. "
+                "Attempting to reconnect."
             )
+
             try:
                 client.close()
             except Exception:
                 logger.debug(
-                    "Error while closing stale MongoDB client.",
+                    "Error closing stale MongoDB client.",
                     exc_info=True,
                 )
-            finally:
-                client = None
-                db = None
+
+            client = None
+            db = None
+
+    # --------------------------------------------------------
+    # Configure MongoDB client
+    # --------------------------------------------------------
+
+    is_tls = (
+        mongo_uri.startswith("mongodb+srv://")
+        or "tls=true" in mongo_uri.lower()
+        or "ssl=true" in mongo_uri.lower()
+    )
+
+    client_kwargs = {
+        "serverSelectionTimeoutMS": SERVER_SELECTION_TIMEOUT_MS,
+        "connectTimeoutMS": CONNECT_TIMEOUT_MS,
+        "socketTimeoutMS": SOCKET_TIMEOUT_MS,
+        "retryWrites": True,
+        "appname": "FoodFreshnessMonitoringPlatform",
+    }
+
+    # Use a trusted CA bundle when TLS is enabled.
+    # Do not disable certificate validation.
+    if is_tls:
+        client_kwargs["tlsCAFile"] = certifi.where()
+
+    logger.info(
+        "Connecting to MongoDB database '%s'. Environment: %s",
+        database_name,
+        "Vercel" if _is_vercel_environment() else "local/development",
+    )
 
     new_client = None
+    last_error = None
 
-    try:
-        logger.info(
-            "Connecting to configured MongoDB database: %s",
-            database_name,
-        )
+    # --------------------------------------------------------
+    # Attempt connection
+    # --------------------------------------------------------
 
-        # Connection attempts: standard certifi first, then resilient TLS fallback if SSL handshake fails
-        last_error = None
-        connected = False
+    for attempt in range(1, CONNECTION_ATTEMPTS + 1):
+        try:
+            new_client = MongoClient(mongo_uri, **client_kwargs)
 
-        is_tls = "mongodb+srv://" in mongo_uri or "tls=true" in mongo_uri.lower() or "ssl=true" in mongo_uri.lower()
-        if is_tls:
-            tls_modes = [(True, False), (False, True)]
-        else:
-            tls_modes = [(False, False)]
+            # MongoClient is lazy; ping verifies actual connectivity.
+            new_client.admin.command("ping")
 
-        for mode_idx, (use_certifi, allow_invalid) in enumerate(tls_modes):
+            # Set the globals before initializing indexes because
+            # init_indexes() uses get_database().
+            client = new_client
+            db = client[database_name]
+
+            logger.info(
+                "Successfully connected to MongoDB database '%s'.",
+                database_name,
+            )
+
+            # Index initialization is separate from connectivity.
             try:
-                client_kwargs = {
-                    "serverSelectionTimeoutMS": SERVER_SELECTION_TIMEOUT_MS,
-                    "connectTimeoutMS": CONNECT_TIMEOUT_MS,
-                    "socketTimeoutMS": SOCKET_TIMEOUT_MS,
-                    "retryWrites": True,
-                    "appname": "FoodFreshnessMonitoringPlatform",
-                }
-                if use_certifi:
-                    try:
-                        client_kwargs["tlsCAFile"] = certifi.where()
-                    except Exception:
-                        pass
-                if allow_invalid:
-                    client_kwargs["tlsAllowInvalidCertificates"] = True
-                    logger.warning(
-                        "Retrying MongoDB connection using resilient TLS fallback (tlsAllowInvalidCertificates)..."
+                init_indexes()
+            except Exception:
+                logger.exception(
+                    "MongoDB is connected, but index initialization "
+                    "failed. Review the index definitions and database "
+                    "permissions."
+                )
+
+            return True
+
+        except Exception as exc:
+            last_error = exc
+
+            logger.error(
+                "MongoDB connection attempt %s/%s failed. "
+                "Error type: %s. Message: %s",
+                attempt,
+                CONNECTION_ATTEMPTS,
+                type(exc).__name__,
+                exc,
+            )
+
+            if new_client is not None:
+                try:
+                    new_client.close()
+                except Exception:
+                    logger.debug(
+                        "Error closing unsuccessful MongoDB client.",
+                        exc_info=True,
                     )
 
-                new_client = MongoClient(mongo_uri, **client_kwargs)
+            new_client = None
+            client = None
+            db = None
 
-                for attempt in range(1, CONNECTION_ATTEMPTS + 1):
-                    try:
-                        new_client.admin.command("ping")
-                        connected = True
-                        last_error = None
-                        break
-                    except PyMongoError as exc:
-                        last_error = exc
-                        if attempt < CONNECTION_ATTEMPTS:
-                            time.sleep(RETRY_DELAY_SECONDS)
+            if attempt < CONNECTION_ATTEMPTS:
+                time.sleep(RETRY_DELAY_SECONDS)
 
-                if connected:
-                    break
-                else:
-                    try:
-                        new_client.close()
-                    except Exception:
-                        pass
-                    new_client = None
-            except Exception as exc:
-                last_error = exc
-                if new_client is not None:
-                    try:
-                        new_client.close()
-                    except Exception:
-                        pass
-                    new_client = None
+    # --------------------------------------------------------
+    # Connection failed
+    # --------------------------------------------------------
 
-        if not connected or last_error is not None:
-            raise last_error
-
-        # Connection verified: expose the client and selected database.
-        client = new_client
-        db = client[database_name]
-
-        logger.info(
-            "Connected successfully to MongoDB database: %s",
-            database_name,
-        )
-
-        # Index errors should be reported separately from connection errors.
-        try:
-            init_indexes()
-        except Exception:
-            logger.exception(
-                "MongoDB is connected, but index initialization failed. "
-                "Review the index definitions and existing database indexes."
-            )
-
-        return True
-
-    except Exception as exc:
-        err_msg = str(exc)
+    if last_error is not None:
         logger.error(
-            "Could not connect to the configured MongoDB database. Error type: %s: %s",
-            type(exc).__name__,
-            exc,
-            exc_info=True,
+            "Unable to connect to the configured MongoDB database "
+            "after %s attempts. Error type: %s.",
+            CONNECTION_ATTEMPTS,
+            type(last_error).__name__,
         )
-        if "TLSV1_ALERT_INTERNAL_ERROR" in err_msg or "SSL handshake failed" in err_msg:
+
+        if _is_vercel_environment():
             logger.error(
-                "\n========================================================================\n"
-                "  MONGODB ATLAS NETWORK ACCESS NOTICE:\n"
-                "  An SSL/TLS handshake alert (TLSV1_ALERT_INTERNAL_ERROR) occurred.\n"
-                "  In MongoDB Atlas, this error almost always means your current public IP\n"
-                "  is not whitelisted in Atlas Network Access.\n\n"
-                "  TO RESOLVE THIS IN MONGODB ATLAS:\n"
-                "  1. Log into your MongoDB Atlas account (https://cloud.mongodb.com)\n"
-                "  2. In the left navigation, click 'Network Access' under 'Security'\n"
-                "  3. Click 'Add IP Address' -> 'Add Current IP Address' (or 0.0.0.0/0)\n"
-                "  4. Click 'Confirm' and wait ~1 minute for Atlas to activate the rule.\n"
-                "========================================================================"
+                "Vercel MongoDB troubleshooting: verify MONGO_URI, "
+                "DATABASE_NAME, Atlas database-user credentials, "
+                "Atlas Network Access, cluster availability, and DNS."
             )
 
-        if new_client is not None:
-            try:
-                new_client.close()
-            except Exception:
-                logger.debug(
-                    "Error while closing failed MongoDB client.",
-                    exc_info=True,
-                )
+    client = None
+    db = None
 
-        # Fallback gracefully to local MongoDB instance if remote Atlas is unreachable
-        if "127.0.0.1" not in mongo_uri and "localhost" not in mongo_uri:
-            try:
-                logger.warning("Attempting automatic fallback to local MongoDB instance (127.0.0.1:27017)...")
-                local_client = MongoClient(
-                    "mongodb://127.0.0.1:27017",
-                    serverSelectionTimeoutMS=3000,
-                    connectTimeoutMS=3000,
-                    appname="FoodFreshnessMonitoringPlatform_LocalFallback",
-                )
-                local_client.admin.command("ping")
-                client = local_client
-                db = local_client[database_name]
-                logger.info("Connected successfully to fallback local MongoDB database: %s", database_name)
-                try:
-                    init_indexes()
-                except Exception:
-                    pass
-                return True
-            except Exception as local_exc:
-                logger.error("Local MongoDB fallback also failed: %s", local_exc)
+    # Deliberately do not fall back to localhost.
+    return False
 
-        client = None
-        db = None
-        return False
 
+# ============================================================
+# CLOSE CONNECTION
+# ============================================================
 
 def close_mongo_connection() -> None:
-    """Close the MongoDB connection during application shutdown."""
+    """Close the MongoDB client and clear the global references."""
     global client, db
 
     if client is not None:
         try:
             client.close()
-            logger.info("MongoDB connection closed.")
+            logger.info("MongoDB client closed.")
+
         except Exception:
-            logger.exception("Error closing MongoDB connection.")
+            logger.exception("Error closing MongoDB client.")
+
         finally:
             client = None
             db = None
 
 
+# ============================================================
+# DATABASE ACCESS
+# ============================================================
+
 def get_database():
-    """Return the configured database, connecting if necessary."""
+    """
+    Return the connected database.
+
+    Attempts to establish a connection if one is not available.
+    Raises RuntimeError if the database cannot be reached.
+    """
     global db
 
     if db is not None:
@@ -245,13 +295,14 @@ def get_database():
 
     if not connect_to_mongo():
         raise RuntimeError(
-            "MongoDB is unavailable. Check the application configuration, "
-            "Atlas network access, DNS, TLS connectivity, and application logs."
+            "MongoDB is unavailable. Check MONGO_URI, DATABASE_NAME, "
+            "Atlas network access, credentials, DNS, TLS, and logs."
         )
 
     if db is None:
         raise RuntimeError(
-            "MongoDB connection succeeded, but the database was not initialized."
+            "MongoDB connection was reported successful, "
+            "but the database handle is unavailable."
         )
 
     return db
@@ -263,7 +314,15 @@ def get_database():
 
 def init_indexes() -> None:
     """Create required indexes and validate existing index options."""
-    database = get_database()
+
+    # connect_to_mongo() assigns db before calling init_indexes().
+    # Therefore this does not trigger a recursive connection attempt.
+    database = db
+
+    if database is None:
+        raise RuntimeError(
+            "Cannot initialize indexes before MongoDB is connected."
+        )
 
     index_definitions = {
         "users": [
@@ -315,16 +374,34 @@ def init_indexes() -> None:
             ([("status", ASCENDING)], {}),
         ],
         "storage_readings": [
-            ([("zone_id", ASCENDING), ("recorded_at", ASCENDING)], {}),
+            (
+                [
+                    ("zone_id", ASCENDING),
+                    ("recorded_at", ASCENDING),
+                ],
+                {},
+            ),
             ([("recorded_at", ASCENDING)], {}),
         ],
         "temperature_rules": [
             ([("rule_id", ASCENDING)], {"unique": True}),
-            ([("category", ASCENDING), ("product_name", ASCENDING)], {}),
+            (
+                [
+                    ("category", ASCENDING),
+                    ("product_name", ASCENDING),
+                ],
+                {},
+            ),
         ],
         "temperature_commands": [
             ([("command_id", ASCENDING)], {"unique": True}),
-            ([("zone_id", ASCENDING), ("created_at", ASCENDING)], {}),
+            (
+                [
+                    ("zone_id", ASCENDING),
+                    ("created_at", ASCENDING),
+                ],
+                {},
+            ),
             ([("status", ASCENDING)], {}),
         ],
     }
@@ -334,6 +411,7 @@ def init_indexes() -> None:
 
         try:
             existing_indexes = collection.index_information()
+
         except PyMongoError:
             logger.exception(
                 "Could not read indexes for collection '%s'.",
@@ -346,7 +424,6 @@ def init_indexes() -> None:
             expected_unique = options.get("unique", False)
             expected_sparse = options.get("sparse", False)
 
-            # PyMongo returns index key specifications as a list of pairs.
             existing = next(
                 (
                     index_info
@@ -383,14 +460,17 @@ def init_indexes() -> None:
 
             try:
                 collection.create_index(keys, **options)
+
                 logger.info(
                     "Created index for '%s': %s",
                     collection_name,
                     expected_keys,
                 )
+
             except PyMongoError:
                 logger.exception(
-                    "Failed to create index for collection '%s', keys=%s",
+                    "Failed to create index for collection '%s', "
+                    "keys=%s",
                     collection_name,
                     expected_keys,
                 )
