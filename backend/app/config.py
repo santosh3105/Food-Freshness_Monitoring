@@ -16,6 +16,7 @@ BACKEND_DIR = APP_DIR.parent
 PROJECT_ROOT = BACKEND_DIR.parent
 
 # Project frontend directory
+FRONTEND_DIR: Path = PROJECT_ROOT / "frontend"
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 IS_VERCEL = os.getenv("VERCEL", "").lower() in ("1", "true", "yes")
