@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Food Freshness Scanner | Food Freshness Platform</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .scanner-app-header {
+      background: #0f172a;
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .scanner-main-layout {
+      max-width: 1300px;
+      margin: 28px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 992px) {
+      .scanner-main-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    .scanner-control-bar {
+      display: flex;
+      gap: 8px;
+      background: #f1f5f9;
+      padding: 5px;
+      border-radius: var(--radius-md);
+      margin-bottom: 18px;
+      border: 1px solid var(--border-color);
+    }
+    .scanner-mode-btn {
+      flex: 1;
+      padding: 9px 14px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .scanner-mode-btn.active {
+      background: #ffffff;
+      color: var(--primary);
+      box-shadow: var(--shadow-sm);
+    }
+    .specimen-pill-strip {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .specimen-pill {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      padding: 5px 12px;
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .specimen-pill:hover,
+    .specimen-pill.active {
+      border-color: var(--primary);
+      background: #ecfdf5;
+      color: var(--primary-hover);
+    }
+    .chem-index-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13px;
+    }
+    .chem-index-row:last-child {
+      border-bottom: none;
+    }
+  </style>
+</head>
+<body style="background: #f8fafc;">
+
+  <!-- Header Bar -->
+  <header class="scanner-app-header">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <a href="index.html" style="text-decoration: none; display: flex; align-items: center; gap: 10px;">
+        <div style="width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #10b981, #0d9488); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white;">
+          🔬
+        </div>
+        <div>
+          <div style="font-size: 17px; font-weight: 800; color: #ffffff; line-height: 1.1;">FreshGuard AI</div>
+          <div style="font-size: 10px; font-weight: 700; color: #34d399; text-transform: uppercase; letter-spacing: 0.06em;">Multi-Spectral Food Scanner</div>
+        </div>
+      </a>
+      <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px;">
+        Computer Vision v2.5
+      </span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <button type="button" class="btn btn-sm btn-outline" style="color: white; border-color: rgba(255,255,255,0.25);" onclick="returnToRoleDashboard()">
+        &larr; Return to Dashboard
+      </button>
+      <div id="scanner-user-badge" style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1;">
+        <span class="user-avatar" id="scanner-user-avatar" style="width: 28px; height: 28px; font-size: 12px; background: #0d9488; color: white;">U</span>
+        <span id="scanner-user-name">Guest User</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Scanner Layout -->
+  <main class="scanner-main-layout">
+
+    <!-- Left Column: Camera Viewfinder & Food Controls -->
+    <div>
+      <div class="card" style="padding: 24px; border-radius: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <h2 style="font-size: 18px; font-weight: 800; margin: 0; color: #0f172a;">Live Food Freshness Scanner</h2>
+            <p style="font-size: 13px; color: var(--text-muted); margin: 3px 0 0 0;">
+              Acquire optical specimen frame to compute surface discoloration, browning index, and Arrhenius shelf-life kinetics.
+            </p>
+          </div>
+          <div id="scanner-status-indicator" class="scanner-hud-pill" style="position: static; font-size: 11px;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; display: inline-block; box-shadow: 0 0 8px #10b981;"></span>
+            <span>SYSTEM READY</span>
+          </div>
+        </div>
+
+        <!-- Mode Selector -->
+        <div class="scanner-control-bar">
+          <button type="button" class="scanner-mode-btn active" id="btn-mode-camera" onclick="setScannerInputMode('camera')">
+            <span>📷</span> Live Camera
+          </button>
+          <button type="button" class="scanner-mode-btn" id="btn-mode-upload" onclick="setScannerInputMode('upload')">
+            <span>📁</span> File Upload
+          </button>
+          <button type="button" class="scanner-mode-btn" id="btn-mode-url" onclick="setScannerInputMode('url')">
+            <span>🌐</span> Image URL &amp; Samples
+          </button>
+        </div>
+
+        <!-- High-Tech Holographic Scanner Viewport -->
+        <div class="food-scanner-viewport" id="scanner-viewport">
+          <!-- Cybernetic Reticle Brackets -->
+          <div class="scanner-bracket top-left"></div>
+          <div class="scanner-bracket top-right"></div>
+          <div class="scanner-bracket bottom-left"></div>
+          <div class="scanner-bracket bottom-right"></div>
+
+          <!-- Rotating Center Crosshair -->
+          <div class="scanner-crosshair">
+            <div class="scanner-crosshair-circle"></div>
+          </div>
+
+          <!-- Grid Overlay -->
+          <div class="food-scanner-grid-overlay"></div>
+
+          <!-- Animated Sweeping Laser Bar -->
+          <div class="scanner-laser-sweep" id="scanner-laser-bar"></div>
+
+          <!-- Top HUD Telemetry -->
+          <div class="scanner-hud-top">
+            <div class="scanner-hud-pill">
+              <span id="hud-cam-status">CAMERA: LIVE</span>
+            </div>
+            <div class="scanner-hud-pill">
+              <span>VIS-NIR 400-1000nm</span>
+            </div>
+            <div class="scanner-hud-pill">
+              <span id="hud-fps-val">30 FPS</span>
+            </div>
+          </div>
+
+          <!-- Bottom HUD Telemetry -->
+          <div class="scanner-hud-bottom">
+            <div class="scanner-hud-pill">
+              <span id="hud-target-text">TARGET: SPECIMEN INGESTION</span>
+            </div>
+            <div class="scanner-hud-pill">
+              <span>ARRHENIUS ENGINE v2</span>
+            </div>
+          </div>
+
+          <!-- AI Detection Bounding Box Overlay -->
+          <div class="scanner-bounding-box" id="scanner-bounding-box" style="top: 25%; left: 22%; width: 56%; height: 55%;">
+            <div class="scanner-bounding-tag" id="scanner-bounding-tag">
+              🍏 Specimen Detected (96.2%)
+            </div>
+          </div>
+
+          <!-- Video Stream element for Live Camera -->
+          <video id="scanner-live-video" class="food-scanner-video" autoplay playsinline muted style="display: block;"></video>
+
+          <!-- Image element for File Upload or URL Image -->
+          <img id="scanner-specimen-img" class="food-scanner-img" src="https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=600&auto=format&fit=crop" alt="Food Specimen" style="display: none;">
+        </div>
+
+        <!-- Mode Panels -->
+        <!-- Mode 1: Camera Controls -->
+        <div id="panel-mode-camera" style="margin-top: 16px;">
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-primary" id="btn-camera-capture" style="flex: 1; padding: 12px; font-weight: 700; font-size: 14px;" onclick="captureAndScanCamera()">
+              📸 Capture Frame &amp; Scan Freshness
+            </button>
+            <button type="button" class="btn btn-outline" id="btn-camera-toggle" onclick="toggleCameraStream()" title="Toggle Camera On/Off">
+              🔄 Switch Camera
+            </button>
+          </div>
+        </div>
+
+        <!-- Mode 2: File Upload Controls -->
+        <div id="panel-mode-upload" style="display: none; margin-top: 16px;">
+          <div style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; background: #f8fafc; cursor: pointer;" onclick="document.getElementById('input-file-scan').click()">
+            <span style="font-size: 32px; display: block; margin-bottom: 6px;">📂</span>
+            <div style="font-weight: 700; font-size: 14px; color: var(--text-main);">Click or Drag &amp; Drop Food Photo</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Supports JPEG, PNG, WebP up to 10MB</div>
+            <input type="file" id="input-file-scan" accept="image/*" style="display: none;" onchange="handleFileScan(this.files[0])">
+          </div>
+        </div>
+
+        <!-- Mode 3: Image URL & Sample Presets -->
+        <div id="panel-mode-url" style="display: none; margin-top: 16px;">
+          <div style="display: flex; gap: 8px;">
+            <input type="url" id="input-url-scan" class="form-control" placeholder="Paste food image URL (https://...)" style="margin: 0;">
+            <button type="button" class="btn btn-primary" onclick="loadUrlForScan()" style="white-space: nowrap; font-weight: 700;">
+              📥 Load Image
+            </button>
+          </div>
+          <div style="margin-top: 12px;">
+            <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Or select benchmark specimen:</div>
+            <div class="specimen-pill-strip">
+              <button type="button" class="specimen-pill active" onclick="loadPresetSpecimen('apple')">🍎 Red Gala Apple</button>
+              <button type="button" class="specimen-pill" onclick="loadPresetSpecimen('broccoli')">🥦 Crisp Broccoli</button>
+              <button type="button" class="specimen-pill" onclick="loadPresetSpecimen('salmon')">🐟 Atlantic Salmon</button>
+              <button type="button" class="specimen-pill" onclick="loadPresetSpecimen('berries')">🍓 Strawberries</button>
+              <button type="button" class="specimen-pill" onclick="loadPresetSpecimen('milk')">🥛 Whole Dairy Milk</button>
+              <button type="button" class="specimen-pill" onclick="loadPresetSpecimen('meat')">🥩 Prime Ribeye Steak</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Food Metadata & Environmental Conditions -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label" style="font-size: 12px;">Food Category</label>
+            <select id="scan-category" class="form-control" style="font-size: 13px; padding: 8px;">
+              <option value="Fruits" selected>Fruits</option>
+              <option value="Vegetables">Vegetables</option>
+              <option value="Fish">Fish &amp; Seafood</option>
+              <option value="Meat">Meat &amp; Poultry</option>
+              <option value="Dairy">Dairy</option>
+              <option value="Bakery">Bakery</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label" style="font-size: 12px;">Storage Temp (°C)</label>
+            <input type="number" id="scan-temp" class="form-control" value="4.0" step="0.5" style="font-size: 13px; padding: 8px;">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label" style="font-size: 12px;">Humidity (%RH)</label>
+            <input type="number" id="scan-rh" class="form-control" value="85" step="1" style="font-size: 13px; padding: 8px;">
+          </div>
+        </div>
+
+        <!-- Scanning Progress Strip -->
+        <div class="scan-progress-strip" id="scan-progress-bar">
+          <div class="scan-progress-fill" id="scan-progress-fill"></div>
+        </div>
+        <div class="scan-status-ticker" id="scan-status-ticker" style="display: none;">
+          <span class="spinner" style="width: 14px; height: 14px;"></span>
+          <span id="scan-ticker-text">Analyzing multi-spectral reflectance...</span>
+        </div>
+
+        <!-- Trigger Scan Button -->
+        <button type="button" id="btn-execute-scan" class="btn btn-primary" style="width: 100%; margin-top: 16px; padding: 13px; font-size: 15px; font-weight: 800; border-radius: 12px;" onclick="executeFoodScan()">
+          ⚡ Run Multi-Spectral AI Freshness Scan
+        </button>
+      </div>
+    </div>
+
+    <!-- Right Column: AI Diagnostic Scorecard & Kinetics -->
+    <div>
+      <div class="card" style="padding: 24px; border-radius: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 14px; margin-bottom: 18px;">
+          <div>
+            <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">AI Diagnostic Certificate</span>
+            <h3 style="font-size: 18px; font-weight: 800; margin: 2px 0 0 0;" id="diag-food-title">Red Gala Apple</h3>
+          </div>
+          <span class="badge badge-fresh" id="diag-badge-status" style="font-size: 12px; padding: 5px 12px;">
+            Grade A: Optimal Fresh
+          </span>
+        </div>
+
+        <!-- Circular Radial Gauge -->
+        <div class="freshness-radial-gauge">
+          <svg class="freshness-radial-svg" viewBox="0 0 140 140">
+            <circle class="freshness-radial-bg" cx="70" cy="70" r="60"></circle>
+            <circle class="freshness-radial-value" id="gauge-circle-val" cx="70" cy="70" r="60" stroke="#10b981"></circle>
+          </svg>
+          <div class="freshness-radial-text">
+            <div class="freshness-radial-num" id="gauge-number" style="color: #10b981;">95%</div>
+            <div class="freshness-radial-lbl">Freshness</div>
+          </div>
+        </div>
+
+        <!-- Shelf Life Countdown Box -->
+        <div style="background: linear-gradient(135deg, #064e3b, #0d9488); color: white; padding: 16px 20px; border-radius: 14px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #a7f3d0;">Estimated Shelf-Life Remaining</div>
+            <div style="font-size: 24px; font-weight: 900; line-height: 1.2; margin-top: 2px;" id="diag-shelf-life-val">8.5 Days</div>
+          </div>
+          <div style="font-size: 32px;">⏳</div>
+        </div>
+
+        <!-- Chemical & Microbial Kinetics Breakdown -->
+        <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 14px; padding: 14px 16px; margin-bottom: 18px;">
+          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 8px;">
+            🔬 Organoleptic &amp; Kinetic Biomarkers:
+          </div>
+          <div class="chem-index-row">
+            <span style="color: var(--text-muted);">Chlorophyll Retention:</span>
+            <strong id="chem-chlorophyll" style="color: #10b981;">94.2% (High)</strong>
+          </div>
+          <div class="chem-index-row">
+            <span style="color: var(--text-muted);">Surface Browning Index:</span>
+            <strong id="chem-browning" style="color: #0d9488;">2.4% (Negligible)</strong>
+          </div>
+          <div class="chem-index-row">
+            <span style="color: var(--text-muted);">Ethylene Emission Rate:</span>
+            <strong id="chem-ethylene">0.12 μL/kg·h (Normal)</strong>
+          </div>
+          <div class="chem-index-row">
+            <span style="color: var(--text-muted);">Microbial Spoilage Risk:</span>
+            <strong id="chem-microbial" style="color: #10b981;">Minimal (Class I)</strong>
+          </div>
+          <div class="chem-index-row">
+            <span style="color: var(--text-muted);">AI Vision Confidence:</span>
+            <strong id="chem-confidence" style="color: #0369a1;">98.4%</strong>
+          </div>
+        </div>
+
+        <!-- Storage Preservation Recommendations -->
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 12px 14px; margin-bottom: 18px; font-size: 12.5px; color: #1e40af; line-height: 1.5;">
+          <strong>💡 Recommended Storage Preservation:</strong>
+          <span id="diag-storage-advice">Store refrigerated at 3°C to 5°C with 85-90% relative humidity. Keep away from ethylene-emitting foods.</span>
+        </div>
+
+        <!-- Actions -->
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn btn-primary" id="btn-save-inventory" style="flex: 1; font-weight: 700;" onclick="saveScannedItemToInventory()">
+            💾 Save to My Inventory
+          </button>
+          <button type="button" class="btn btn-outline" style="font-weight: 700;" onclick="window.print()">
+            🖨️ Print Certificate
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast-container"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/scan.js"></script>
+</body>
+</html>
