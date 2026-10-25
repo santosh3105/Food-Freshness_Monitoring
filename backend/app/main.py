@@ -148,11 +148,14 @@ async def vercel_routing_middleware(request: Request, call_next):
 
     if current_path in ("/api/index.py", "/api/index", "/api/index.py/", "/api/"):
         matched_path = (
-            request.headers.get("x-matched-path")
-            or request.headers.get("x-forwarded-uri")
+            request.headers.get("x-forwarded-uri")
+            or request.headers.get("x-original-url")
+            or request.headers.get("x-rewrite-url")
             or request.headers.get("x-real-path")
+            or request.headers.get("x-matched-path")
+            or request.query_params.get("__path__")
         )
-        if matched_path:
+        if matched_path and matched_path not in ("/api/index.py", "/api/index", "/api/index.py/"):
             clean_path = matched_path.split("?")[0]
             if not clean_path.startswith("/"):
                 clean_path = "/" + clean_path
@@ -161,6 +164,20 @@ async def vercel_routing_middleware(request: Request, call_next):
 
     response = await call_next(request)
     return response
+
+
+@app.get("/api/index.py", include_in_schema=False)
+@app.get("/api/index", include_in_schema=False)
+async def vercel_entrypoint_fallback():
+    login_page = settings.FRONTEND_DIR / "login.html"
+    if login_page.is_file():
+        return FileResponse(login_page)
+    return {
+        "status": "healthy",
+        "service": settings.PROJECT_NAME,
+        "docs": "/docs",
+        "openapi": "/openapi.json"
+    }
 
 
 # ============================================================
