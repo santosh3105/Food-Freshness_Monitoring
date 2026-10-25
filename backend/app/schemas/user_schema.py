@@ -43,8 +43,20 @@ class UserRegisterRequest(BaseModel):
 
 
 class UserLoginRequest(BaseModel):
-    email: EmailStr = Field(..., description="User Email Address")
+    email: Optional[str] = Field(None, description="User Email Address")
+    username: Optional[str] = Field(None, description="User Email or Username")
     password: str = Field(..., description="Password")
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_non_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Password cannot be blank")
+        return v
+
+    def get_login_identifier(self) -> str:
+        ident = self.email or self.username or ""
+        return ident.strip().lower()
 
 
 class UserResponse(BaseModel):
@@ -66,11 +78,6 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
-
-
-class GoogleAuthRequest(BaseModel):
-    id_token: str = Field(..., description="Google ID Token (JWT) from Google Identity Services")
-    role: Optional[str] = Field(default=None, description="Requested operational role (Admin is rejected)")
 
 
 class UserUpdateRequest(BaseModel):

@@ -376,36 +376,15 @@ def test_admin_system_health_and_config():
 
 
 # ==============================================================================
-# 10. Google Auth & Admin Escalation Protection
+# 10. Google Auth Removed & Pure Email/Password Authentication Enforced
 # ==============================================================================
-def test_google_auth_and_admin_escalation_protection():
-    # Simulate a Google JWT ID Token payload (base64url header.payload.signature)
-    import base64
-    import json
-
-    uid = uuid.uuid4().hex[:8]
-    email = f"googleuser_{uid}@gmail.com"
-    payload = {
-        "sub": f"google_sub_{uid}",
-        "email": email,
-        "name": f"Google Test User {uid}",
-        "email_verified": True,
-    }
-    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-    simulated_token = f"dummyheader.{encoded}.dummysignature"
-
-    # Attempt Google auth with role="Admin" (should be strictly forced to Consumer!)
+def test_google_auth_removed_and_rejected():
+    """Verify that Google OAuth route is completely removed and rejected (404/405)."""
     res = client.post(
         "/api/auth/google",
-        json={"id_token": simulated_token, "role": "Admin"}
+        json={"id_token": "dummy.token", "role": "Admin"}
     )
-    assert res.status_code == 200
-    data = res.json()
-    assert "access_token" in data
-    # Admin self-assignment was rejected; assigned default Consumer
-    assert data["user"]["role"] != "Admin"
-    assert data["user"]["role"] == "Consumer"
-    assert data["user"]["auth_provider"] == "google"
+    assert res.status_code in (404, 405), f"Expected 404 or 405 for removed Google auth, got {res.status_code}"
 
 
 # ==============================================================================

@@ -121,6 +121,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Quick demo autofill buttons
     setupDemoAutofill();
+
+    // Forgot Password Link Handler
+    const forgotLink = document.getElementById("forgot-password-link");
+    if (forgotLink) {
+      forgotLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        const alertBox = document.getElementById("auth-alert");
+        const msg = "Self-service password recovery is currently unavailable. Please contact your system administrator or support team to reset your platform credentials.";
+        if (alertBox) {
+          alertBox.className = "auth-alert";
+          alertBox.style.background = "#eff6ff";
+          alertBox.style.border = "1px solid #bfdbfe";
+          alertBox.style.color = "#1e40af";
+          alertBox.textContent = msg;
+          alertBox.style.display = "block";
+        }
+        showToast("Password recovery is unavailable. Contact administrator.", "info");
+      });
+    }
   }
 
   // 5. Registration Form Handling

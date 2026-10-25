@@ -1,11 +1,10 @@
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Request, HTTPException
 from backend.app.schemas.user_schema import (
     UserRegisterRequest,
     UserLoginRequest,
     UserResponse,
     TokenResponse,
-    GoogleAuthRequest,
 )
 
 from backend.app.services.auth_service import AuthService
@@ -36,24 +35,60 @@ async def register(data: UserRegisterRequest):
     response_model=TokenResponse,
     summary="Authenticate user and obtain JWT token"
 )
-async def login(data: UserLoginRequest):
+async def login(request: Request):
     """
     Log in with email and password to receive a signed JWT Bearer access token.
+    Accepts application/json (with email or username) and application/x-www-form-urlencoded credentials.
     """
-    return AuthService.authenticate_user(data)
+    content_type = request.headers.get("content-type", "").lower()
+    email_val = None
+    username_val = None
+    password_val = None
 
+    if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+        try:
+            form = await request.form()
+            email_val = form.get("email")
+            username_val = form.get("username")
+            password_val = form.get("password")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unable to parse form data: {exc}"
+            )
+    else:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                email_val = body.get("email")
+                username_val = body.get("username")
+                password_val = body.get("password")
+            else:
+                raise ValueError("JSON body must be an object")
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid request body. Expected JSON object or form data."
+            )
 
-@router.post(
-    "/google",
-    response_model=TokenResponse,
-    summary="Authenticate or register using Google Sign-In"
-)
-async def google_auth(data: GoogleAuthRequest):
-    """
-    Verify Google ID token, resolve user identity by Google 'sub',
-    issue signed JWT token, and prevent Admin role self-escalation.
-    """
-    return AuthService.authenticate_google_user(data)
+    resolved_email = email_val or username_val
+    if not resolved_email or not password_val:
+        missing = []
+        if not resolved_email:
+            missing.append("email/username")
+        if not password_val:
+            missing.append("password")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Missing required login field(s): {', '.join(missing)}."
+        )
+
+    login_req = UserLoginRequest(
+        email=str(resolved_email).strip(),
+        username=str(username_val).strip() if username_val else None,
+        password=str(password_val),
+    )
+    return AuthService.authenticate_user(login_req)
 
 
 @router.get(

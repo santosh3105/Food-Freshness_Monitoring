@@ -171,3 +171,44 @@ def test_register_administrator_role_and_access():
     assert res_admin.status_code == 200
     assert "total_users" in res_admin.json()
 
+def test_login_with_username_field():
+    """Verify login accepts 'username' key in JSON payload."""
+    res = client.post("/api/auth/login", json={
+        "username": "consumer@foodfresh.com",
+        "password": "ConsumerPass123!"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert "access_token" in data
+    assert data["user"]["email"] == "consumer@foodfresh.com"
+
+
+def test_login_with_form_urlencoded():
+    """Verify login accepts application/x-www-form-urlencoded credentials."""
+    res = client.post(
+        "/api/auth/login",
+        data={
+            "username": "consumer@foodfresh.com",
+            "password": "ConsumerPass123!"
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert "access_token" in data
+    assert data["user"]["email"] == "consumer@foodfresh.com"
+
+
+def test_login_missing_fields_returns_422():
+    """Verify login without password or email returns HTTP 422 with clear message."""
+    res1 = client.post("/api/auth/login", json={"email": "consumer@foodfresh.com"})
+    assert res1.status_code == 422
+
+    res2 = client.post("/api/auth/login", json={"password": "ConsumerPass123!"})
+    assert res2.status_code == 422
+
+
+def test_google_auth_endpoint_is_removed():
+    """Verify /api/auth/google endpoint is removed and returns 404."""
+    res = client.post("/api/auth/google", json={"id_token": "dummy"})
+    assert res.status_code in (404, 405)
