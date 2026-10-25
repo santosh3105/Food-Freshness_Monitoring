@@ -2,7 +2,7 @@ import os
 import logging
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -131,6 +131,60 @@ app.add_middleware(
 
 
 # ============================================================
+# VERCEL SERVERLESS ROUTING MIDDLEWARE
+# ============================================================
+
+@app.middleware("http")
+async def vercel_routing_middleware(request: Request, call_next):
+    """
+    Ensure Vercel serverless executions preserve the intended request path.
+    When Vercel rewrites or catches traffic through /api/index.py, the real requested path
+    is passed in headers like 'x-matched-path', 'x-forwarded-uri', or 'x-real-path'.
+    This middleware restores the original path in the ASGI scope so FastAPI's router
+    matches /docs, /openapi.json, /health, /api/..., and frontend pages accurately.
+    """
+    scope = request.scope
+    current_path = scope.get("path", "")
+
+    if current_path in ("/api/index.py", "/api/index", "/api/index.py/", "/api/"):
+        matched_path = (
+            request.headers.get("x-matched-path")
+            or request.headers.get("x-forwarded-uri")
+            or request.headers.get("x-real-path")
+        )
+        if matched_path:
+            clean_path = matched_path.split("?")[0]
+            if not clean_path.startswith("/"):
+                clean_path = "/" + clean_path
+            scope["path"] = clean_path
+            scope["raw_path"] = clean_path.encode("utf-8")
+
+    response = await call_next(request)
+    return response
+
+
+# ============================================================
+# GLOBAL DATABASE EXCEPTION HANDLERS
+# ============================================================
+
+@app.exception_handler(RuntimeError)
+async def runtime_error_handler(request: Request, exc: RuntimeError):
+    msg = str(exc)
+    logger.error("RuntimeError intercepted on path %s: %s", request.url.path, msg)
+    if "mongodb" in msg.lower() or "database" in msg.lower() or "atlas" in msg.lower():
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "detail": "Database service unavailable. Please check MongoDB Atlas connection."
+            },
+        )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "An internal server error occurred."},
+    )
+
+
+# ============================================================
 # UPLOADS DIRECTORY
 # ============================================================
 
@@ -152,18 +206,25 @@ app.mount(
 
 api_prefix = settings.API_V1_PREFIX
 
-app.include_router(auth_routes.router, prefix=api_prefix)
-app.include_router(user_routes.router, prefix=api_prefix)
-app.include_router(inventory_routes.router, prefix=api_prefix)
-app.include_router(dashboard_routes.router, prefix=api_prefix)
-app.include_router(ai_routes.router, prefix=api_prefix)
-app.include_router(analytics_routes.router, prefix=api_prefix)
-app.include_router(report_routes.router, prefix=api_prefix)
-app.include_router(retailer_routes.router, prefix=api_prefix)
-app.include_router(inspector_routes.router, prefix=api_prefix)
-app.include_router(admin_routes.router, prefix=api_prefix)
-app.include_router(warehouse_routes.router, prefix=api_prefix)
-app.include_router(notification_routes.router, prefix=api_prefix)
+all_routers = [
+    auth_routes.router,
+    user_routes.router,
+    inventory_routes.router,
+    dashboard_routes.router,
+    ai_routes.router,
+    analytics_routes.router,
+    report_routes.router,
+    retailer_routes.router,
+    inspector_routes.router,
+    admin_routes.router,
+    warehouse_routes.router,
+    notification_routes.router,
+]
+
+for r in all_routers:
+    app.include_router(r, prefix=api_prefix)
+    # Also support direct path without /api prefix (e.g. /auth/login)
+    app.include_router(r, include_in_schema=False)
 
 
 # ============================================================
@@ -187,6 +248,34 @@ def check_database_connection() -> bool:
     except Exception:
         logger.exception("MongoDB connectivity check failed.")
         return False
+
+
+# ============================================================
+# API DOCUMENTATION ALIASES (/api/docs & /api/openapi.json)
+# ============================================================
+
+@app.get(
+    "/api/docs",
+    include_in_schema=False,
+    summary="Swagger UI documentation under /api prefix"
+)
+async def api_docs_swagger():
+    from fastapi.openapi.docs import get_swagger_ui_html
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title=f"{settings.PROJECT_NAME} - Swagger UI",
+        swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
+        swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
+    )
+
+
+@app.get(
+    "/api/openapi.json",
+    include_in_schema=False,
+    summary="OpenAPI JSON specification under /api prefix"
+)
+async def api_openapi_specification():
+    return app.openapi()
 
 
 # ============================================================

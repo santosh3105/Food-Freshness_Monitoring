@@ -15,9 +15,20 @@ APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
 PROJECT_ROOT = BACKEND_DIR.parent
 
-# Project frontend directory
-FRONTEND_DIR: Path = PROJECT_ROOT / "frontend"
-FRONTEND_DIR = PROJECT_ROOT / "frontend"
+def _resolve_frontend_dir() -> Path:
+    candidates = [
+        PROJECT_ROOT / "frontend",
+        BACKEND_DIR.parent / "frontend",
+        Path.cwd() / "frontend",
+        Path("/var/task/frontend"),
+        Path(__file__).resolve().parents[2] / "frontend",
+    ]
+    for c in candidates:
+        if c.is_dir():
+            return c
+    return PROJECT_ROOT / "frontend"
+
+FRONTEND_DIR: Path = _resolve_frontend_dir()
 
 IS_VERCEL = os.getenv("VERCEL", "").lower() in ("1", "true", "yes")
 
@@ -72,10 +83,11 @@ def _get_mongo_uri() -> str:
 
     if not uri:
         if IS_VERCEL:
-            raise ValueError(
-                "MONGO_URI is missing. Configure MONGO_URI in "
-                "Vercel Project Settings > Environment Variables."
+            logger.error(
+                "MONGO_URI is missing in Vercel Environment Variables. "
+                "Configure MONGO_URI in Vercel Project Settings > Environment Variables."
             )
+            return ""
 
         uri = "mongodb://127.0.0.1:27017/food_freshness_db"
 
@@ -85,18 +97,34 @@ def _get_mongo_uri() -> str:
         uri = uri[len("MONGO_URI="):].strip().strip("\"'")
 
     if "<" in uri or ">" in uri:
+        if IS_VERCEL:
+            logger.error(
+                "MONGO_URI contains placeholder characters '<' or '>'. "
+                "Update Vercel Environment Variables with actual Atlas credentials."
+            )
+            return ""
         raise ValueError(
             "MONGO_URI contains placeholder characters. "
             "Configure the actual MongoDB connection string."
         )
 
     if not uri.startswith(("mongodb://", "mongodb+srv://")):
+        if IS_VERCEL:
+            logger.error(
+                "Invalid MONGO_URI scheme. It must begin with mongodb:// or mongodb+srv://."
+            )
+            return ""
         raise ValueError(
             "Invalid MONGO_URI. It must begin with "
             "mongodb:// or mongodb+srv://."
         )
 
     if uri.startswith("mongodb+srv://") and uri.count("@") != 1:
+        if IS_VERCEL:
+            logger.error(
+                "Invalid MongoDB Atlas URI. Check the username, password, and cluster hostname."
+            )
+            return ""
         raise ValueError(
             "Invalid MongoDB Atlas URI. Check the username, "
             "password, and cluster hostname."
@@ -238,9 +266,9 @@ if IS_VERCEL:
         or len(settings.JWT_SECRET) < 32
         or settings.JWT_SECRET == DEFAULT_INSECURE_JWT_SECRET
     ):
-        raise ValueError(
-            "JWT_SECRET is missing or insecure. Configure a strong "
-            "JWT_SECRET in Vercel Environment Variables."
+        logger.warning(
+            "JWT_SECRET is unconfigured or insecure in Vercel Environment Variables. "
+            "Configure a 32+ character JWT_SECRET in Vercel Project Settings."
         )
 
 

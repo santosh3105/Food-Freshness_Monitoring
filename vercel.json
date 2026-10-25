@@ -3,17 +3,18 @@
   "version": 2,
   "cleanUrls": true,
   "trailingSlash": false,
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "frontend/**"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "/api/index.py"
     },
     {
-      "source": "/health",
-      "destination": "/api/index.py"
-    },
-    {
-      "source": "/ready",
+      "source": "/api",
       "destination": "/api/index.py"
     },
     {
@@ -22,6 +23,14 @@
     },
     {
       "source": "/openapi.json",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/ready",
       "destination": "/api/index.py"
     },
     {

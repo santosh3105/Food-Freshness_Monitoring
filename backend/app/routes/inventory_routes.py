@@ -22,6 +22,12 @@ router = APIRouter(prefix="/inventory", tags=["Food Inventory"])
     status_code=status.HTTP_201_CREATED,
     summary="Add a new food item to inventory"
 )
+@router.post(
+    "/",
+    response_model=InventoryResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False
+)
 async def create_food_item(
     data: InventoryCreateRequest,
     current_user: Dict[str, Any] = Depends(get_current_user)
@@ -37,6 +43,11 @@ async def create_food_item(
     "",
     response_model=List[InventoryResponse],
     summary="List food inventory with search, filters, and sorting"
+)
+@router.get(
+    "/",
+    response_model=List[InventoryResponse],
+    include_in_schema=False
 )
 async def list_food_items(
     search: Optional[str] = Query(None, description="Search by name, location, or batch"),

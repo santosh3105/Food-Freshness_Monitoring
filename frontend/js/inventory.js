@@ -5,9 +5,75 @@
 
 let currentEditItemId = null;
 let searchDebounceTimer = null;
+let inventoryBooted = false;
+let inventoryTableInitialized = false;
+let isInventoryLoading = false;
+
+function safeEscape(value) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function escapeJsString(value) {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Fallbacks in case api.js utilities load in non-standard order
+if (typeof window !== "undefined") {
+  if (typeof window.escapeHtml === "undefined") {
+    window.escapeHtml = safeEscape;
+  }
+  if (typeof window.showToast === "undefined") {
+    window.showToast = function (message, type = "info") {
+      console.log(`[Toast ${type}]`, message);
+    };
+  }
+  if (typeof window.setButtonLoading === "undefined") {
+    window.setButtonLoading = function (btn, loading, text) {
+      if (!btn) return;
+      btn.disabled = !!loading;
+    };
+  }
+}
+
+if (typeof showToast === "undefined") {
+  var showToast = function (message, type = "info") {
+    if (typeof window !== "undefined" && typeof window.showToast === "function" && window.showToast !== showToast) {
+      window.showToast(message, type);
+    } else {
+      console.log(`[Toast ${type}]`, message);
+    }
+  };
+}
+
+if (typeof escapeHtml === "undefined") {
+  var escapeHtml = safeEscape;
+}
+
+if (typeof setButtonLoading === "undefined") {
+  var setButtonLoading = function (btn, loading, text) {
+    if (!btn) return;
+    btn.disabled = !!loading;
+  };
+}
 
 function bootInventory() {
-  if (!api.requireAuth()) return;
+  if (inventoryBooted) return;
+  if (typeof api === "undefined" || !api.requireAuth || !api.requireAuth()) return;
+  inventoryBooted = true;
 
   // 1. Inventory Listing Page Initializer
   if (document.getElementById("inventory-table-body")) {
@@ -37,6 +103,9 @@ if (document.readyState === "loading") {
 function initInventoryTable() {
   loadInventory();
 
+  if (inventoryTableInitialized) return;
+  inventoryTableInitialized = true;
+
   // Search input with debounce
   const searchInput = document.getElementById("search-input");
   if (searchInput) {
@@ -65,33 +134,89 @@ function initInventoryTable() {
   if (editForm) {
     editForm.addEventListener("submit", handleEditFormSubmit);
   }
+
+  // Event delegation on table body for Edit and Delete buttons
+  const tableBody = document.getElementById("inventory-table-body");
+  if (tableBody) {
+    tableBody.addEventListener("click", (e) => {
+      const editBtn = e.target.closest(".btn-edit-item");
+      if (editBtn) {
+        const itemId = editBtn.getAttribute("data-id");
+        if (itemId) openEditModal(itemId);
+        return;
+      }
+
+      const deleteBtn = e.target.closest(".btn-delete-item");
+      if (deleteBtn) {
+        const itemId = deleteBtn.getAttribute("data-id");
+        const foodName = deleteBtn.getAttribute("data-name") || "Food Item";
+        if (itemId) confirmDeleteItem(itemId, foodName);
+        return;
+      }
+    });
+  }
 }
 
-let isInventoryLoading = false;
-
 function normalizeInventoryResponse(response) {
-  // Support the common response formats used by FastAPI and API wrappers:
-  // [ ... ], { items: [...] }, { data: [...] }, { inventory: [...] }, etc.
+  // Support direct array, wrapped objects ({ items, data, inventory, results, records, payload, list }),
+  // and JSON strings.
   let value = response;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch (e) {
+      return [];
+    }
+  }
 
-  for (let depth = 0; depth < 5; depth += 1) {
+  for (let depth = 0; depth < 6; depth += 1) {
     if (Array.isArray(value)) {
       return value
         .filter((item) => item && typeof item === "object")
-        .map((item) => ({
-          ...item,
-          id: item.id ?? item._id ?? item.inventory_id ?? item.item_id,
-          food_name: item.food_name ?? item.name ?? item.foodName ?? "Food Item",
-          category: item.category ?? item.food_category ?? "Other",
-          quantity: item.quantity ?? item.amount ?? 0,
-          unit: item.unit ?? item.quantity_unit ?? "kg",
-          purchase_date: item.purchase_date ?? item.purchaseDate ?? null,
-          expiry_date: item.expiry_date ?? item.expiration_date ?? item.expiryDate ?? null,
-          storage_type: item.storage_type ?? item.storageType ?? "Room Temperature",
-          freshness_status: item.freshness_status ?? item.status ?? item.freshness_label ?? "",
-          freshness_score: item.freshness_score ?? item.freshnessScore ?? item.visual_score ?? null,
-          image_url: item.image_url ?? item.imageUrl ?? null,
-        }));
+        .map((item) => {
+          const rawId = item.id ?? item._id ?? item.inventory_id ?? item.item_id;
+          const id = (rawId && typeof rawId === "object" && rawId.$oid)
+            ? String(rawId.$oid)
+            : (rawId != null ? String(rawId) : "");
+
+          const rawFoodName = item.food_name || item.name || item.foodName || "Food Item";
+          const foodName = typeof rawFoodName === "string" ? rawFoodName.trim() : String(rawFoodName);
+
+          const rawCategory = item.category || item.food_category || "Other";
+          const category = typeof rawCategory === "string" ? rawCategory.trim() : String(rawCategory);
+
+          const quantity = (item.quantity !== undefined && item.quantity !== null && !isNaN(Number(item.quantity)))
+            ? Number(item.quantity)
+            : (item.amount !== undefined && !isNaN(Number(item.amount)) ? Number(item.amount) : 0);
+
+          const unit = (item.unit || item.quantity_unit || "kg").trim();
+          const purchaseDate = item.purchase_date || item.purchaseDate || null;
+          const expiryDate = item.expiry_date || item.expiration_date || item.expiryDate || null;
+          const storageType = item.storage_type || item.storageType || "Room Temperature";
+          const freshnessStatus = item.freshness_status || item.status || item.freshness_label || "Not Analyzed";
+
+          const freshnessScore = (item.freshness_score != null && !isNaN(Number(item.freshness_score)))
+            ? Number(item.freshness_score)
+            : (item.freshnessScore != null && !isNaN(Number(item.freshnessScore)) ? Number(item.freshnessScore) : null);
+
+          return {
+            ...item,
+            id,
+            food_name: foodName,
+            name: foodName,
+            category,
+            quantity,
+            unit,
+            purchase_date: purchaseDate,
+            expiry_date: expiryDate,
+            storage_type: storageType,
+            freshness_status: freshnessStatus,
+            freshness_score: freshnessScore,
+            image_url: item.image_url || item.imageUrl || null,
+            batch_number: item.batch_number || item.batchNumber || null,
+            location: item.location || item.storage_location || null,
+          };
+        });
     }
 
     if (!value || typeof value !== "object") {
@@ -101,10 +226,15 @@ function normalizeInventoryResponse(response) {
     const possibleArrays = [
       value.items,
       value.inventory,
-      value.results,
-      value.foods,
-      value.records,
       value.data,
+      value.results,
+      value.result,
+      value.foods,
+      value.food_items,
+      value.inventory_items,
+      value.records,
+      value.payload,
+      value.list,
     ];
 
     const next = possibleArrays.find(
@@ -176,16 +306,16 @@ async function loadInventory() {
     const rawData = await api.getInventory(params);
     let items = normalizeInventoryResponse(rawData);
 
-    // If no filters are active and the API wrapper returned an unfamiliar
-    // empty shape, make one unfiltered request before showing an empty state.
+    // If an unexpected empty wrapper was returned on filtered attempt, retry without filter
     if (
       items.length === 0 &&
+      !Array.isArray(rawData) &&
       !searchValue &&
       !isRealFilter(categoryValue) &&
       !isRealFilter(expiryValue) &&
       !isRealFilter(storageValue)
     ) {
-      console.warn("[Inventory] No items extracted from the first response. Retrying with default parameters.", rawData);
+      console.warn("[Inventory] Unfamiliar empty response shape. Retrying with default parameters.", rawData);
       const fallbackData = await api.getInventory({});
       items = normalizeInventoryResponse(fallbackData);
     }
@@ -194,32 +324,61 @@ async function loadInventory() {
     renderInventoryTable(items);
   } catch (error) {
     console.error("[Inventory] Error retrieving food inventory:", error);
-    if (totalCountEl) totalCountEl.textContent = "Failed to load inventory";
+    const isAuthError =
+      (error && error.message && (
+        error.message.toLowerCase().includes("session expired") ||
+        error.message.toLowerCase().includes("log in again") ||
+        error.message.toLowerCase().includes("401") ||
+        error.message.toLowerCase().includes("unauthorized")
+      ));
 
-    tableBody.innerHTML = `
-      <tr>
-        <td colspan="8" style="text-align:center; padding: 40px 20px; color:var(--text-main);">
-          <div style="font-size:36px; margin-bottom:12px;">⚠️</div>
-          <div style="font-weight:700; color:#ef4444; font-size:17px; margin-bottom:8px;">Unable to Connect to Food Inventory</div>
-          <div style="color:var(--text-muted); font-size:14px; max-width:500px; margin:0 auto 18px auto; line-height:1.5;">
-            ${escapeHtml(error.message || "Failed to reach backend server or MongoDB service. Please verify your connection.")}
-          </div>
-          <div style="display:flex; gap:10px; justify-content:center; align-items:center;">
-            <button type="button" class="btn btn-primary btn-sm" onclick="loadInventory()">
-              🔄 Retry Loading
-            </button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="seedDatasetItems()">
-              🌱 Load Dataset Items
-            </button>
-          </div>
-        </td>
-      </tr>
-    `;
-    showToast("Error loading inventory: " + (error.message || "Failed to fetch items"), "error");
+    if (totalCountEl) {
+      totalCountEl.textContent = isAuthError ? "Authentication required" : "Failed to load inventory";
+    }
+
+    if (isAuthError) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="8" style="text-align:center; padding: 40px 20px; color:var(--text-main);">
+            <div style="font-size:36px; margin-bottom:12px;">🔒</div>
+            <div style="font-weight:700; color:#ef4444; font-size:17px; margin-bottom:8px;">Session Expired</div>
+            <div style="color:var(--text-muted); font-size:14px; max-width:450px; margin:0 auto 18px auto; line-height:1.5;">
+              Your login session has expired or is invalid. Please sign in again to view your inventory.
+            </div>
+            <a href="login.html?expired=true&redirect=inventory.html" class="btn btn-primary btn-sm">
+              🔑 Sign In Again
+            </a>
+          </td>
+        </tr>
+      `;
+      showToast("Session expired. Please sign in again.", "warning");
+    } else {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="8" style="text-align:center; padding: 40px 20px; color:var(--text-main);">
+            <div style="font-size:36px; margin-bottom:12px;">⚠️</div>
+            <div style="font-weight:700; color:#ef4444; font-size:17px; margin-bottom:8px;">Unable to Connect to Food Inventory</div>
+            <div style="color:var(--text-muted); font-size:14px; max-width:500px; margin:0 auto 18px auto; line-height:1.5;">
+              ${safeEscape(error.message || "Failed to reach backend server or MongoDB service. Please verify your connection.")}
+            </div>
+            <div style="display:flex; gap:10px; justify-content:center; align-items:center;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="loadInventory()">
+                🔄 Retry Loading
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="seedDatasetItems()">
+                🌱 Load Dataset Items
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+      showToast("Error loading inventory: " + (error.message || "Failed to fetch items"), "error");
+    }
   } finally {
     isInventoryLoading = false;
   }
 }
+
 function renderInventoryTable(items) {
   const tableBody = document.getElementById("inventory-table-body");
   const totalCountEl = document.getElementById("inventory-total-count");
@@ -240,8 +399,8 @@ function renderInventoryTable(items) {
       if (!item.expiry_date) return false;
       const exp = new Date(item.expiry_date);
       const diff = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
-      const statusLower = (item.freshness_status || "").toLowerCase();
-      return diff <= 3 || statusLower === "spoiled";
+      const statusLower = (item.freshness_status || "").toLowerCase().trim();
+      return diff <= 3 || statusLower === "spoiled" || statusLower === "expired" || statusLower === "rotten";
     }).length;
 
     const actionBadge = document.getElementById("action-alerts-badge");
@@ -300,34 +459,55 @@ function renderInventoryTable(items) {
       const storageType = item.storage_type || "Room Temperature";
 
       // Expiry calculation
-      let expiryBadge = `<span class="badge badge-fresh">${escapeHtml(expiryDate)}</span>`;
+      let expiryBadge = `<span class="badge badge-fresh">${safeEscape(expiryDate)}</span>`;
       if (item.expiry_date) {
         const exp = new Date(item.expiry_date);
         const diffDays = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
-        if (diffDays < 0) {
-          expiryBadge = `<span class="badge badge-danger">${escapeHtml(expiryDate)} (Expired)</span>`;
+        if (isNaN(diffDays)) {
+          expiryBadge = `<span class="badge badge-pending">${safeEscape(expiryDate)}</span>`;
+        } else if (diffDays < 0) {
+          expiryBadge = `<span class="badge badge-danger">${safeEscape(expiryDate)} (Expired)</span>`;
         } else if (diffDays === 0) {
-          expiryBadge = `<span class="badge badge-danger">${escapeHtml(expiryDate)} (Expires Today)</span>`;
+          expiryBadge = `<span class="badge badge-danger">${safeEscape(expiryDate)} (Expires Today)</span>`;
         } else if (diffDays <= 3) {
-          expiryBadge = `<span class="badge badge-warning">${escapeHtml(expiryDate)} (${diffDays}d left)</span>`;
+          expiryBadge = `<span class="badge badge-warning">${safeEscape(expiryDate)} (${diffDays}d left)</span>`;
         } else {
-          expiryBadge = `<span class="badge badge-fresh">${escapeHtml(expiryDate)} (${diffDays}d left)</span>`;
+          expiryBadge = `<span class="badge badge-fresh">${safeEscape(expiryDate)} (${diffDays}d left)</span>`;
         }
       }
 
       // Freshness Status badge
       const statusLower = (item.freshness_status || "").toLowerCase().trim();
       let statusBadge = `<span class="badge badge-pending">Not Analyzed</span>`;
-      if (statusLower === "fresh" || statusLower === "good" || statusLower === "acceptable") {
-        statusBadge = `<span class="badge badge-fresh">${escapeHtml(item.freshness_status)}</span>`;
-      } else if (statusLower === "spoiled") {
+      if (
+        statusLower === "fresh" ||
+        statusLower === "good" ||
+        statusLower === "acceptable" ||
+        statusLower === "optimal"
+      ) {
+        statusBadge = `<span class="badge badge-fresh">${safeEscape(item.freshness_status || "Fresh")}</span>`;
+      } else if (
+        statusLower === "spoiled" ||
+        statusLower === "rotten" ||
+        statusLower === "bad"
+      ) {
         statusBadge = `<span class="badge badge-danger">Spoiled</span>`;
-      } else if (statusLower.includes("soon") || statusLower.includes("near")) {
+      } else if (
+        statusLower === "expired"
+      ) {
+        statusBadge = `<span class="badge badge-danger">Expired</span>`;
+      } else if (
+        statusLower.includes("soon") ||
+        statusLower.includes("near") ||
+        statusLower === "expiring"
+      ) {
         statusBadge = `<span class="badge badge-warning">Expiring Soon</span>`;
+      } else if (item.freshness_status && statusLower !== "not analyzed") {
+        statusBadge = `<span class="badge badge-info">${safeEscape(item.freshness_status)}</span>`;
       }
 
-      const scoreHtml = item.freshness_score != null
-        ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Score: ${Math.round(item.freshness_score)}%</div>`
+      const scoreHtml = (item.freshness_score != null && !isNaN(Number(item.freshness_score)))
+        ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Score: ${Math.round(Number(item.freshness_score))}%</div>`
         : "";
 
       return `
@@ -335,32 +515,32 @@ function renderInventoryTable(items) {
         <td>
           <div class="food-cell">
             <div class="food-avatar">
-              ${item.image_url ? `<img src="${item.image_url}" alt="${escapeHtml(foodName)}" style="width:100%; height:100%; object-fit:cover; border-radius:inherit;">` : getCategoryEmoji(category)}
+              ${item.image_url ? `<img src="${item.image_url}" alt="${safeEscape(foodName)}" style="width:100%; height:100%; object-fit:cover; border-radius:inherit;">` : getCategoryEmoji(category)}
             </div>
             <div>
-              <div class="food-title">${escapeHtml(foodName)}</div>
-              <div class="food-batch">${escapeHtml(item.batch_number ? `Batch: ${item.batch_number}` : (item.location || 'Main Storage'))}</div>
+              <div class="food-title">${safeEscape(foodName)}</div>
+              <div class="food-batch">${safeEscape(item.batch_number ? `Batch: ${item.batch_number}` : (item.location || 'Main Storage'))}</div>
             </div>
           </div>
         </td>
-        <td><span class="badge" style="background:#f1f5f9;color:#334155;">${escapeHtml(category)}</span></td>
-        <td><strong>${quantity}</strong> ${escapeHtml(unit)}</td>
-        <td><small class="text-muted">${escapeHtml(purchaseDate)}</small></td>
+        <td><span class="badge" style="background:#f1f5f9;color:#334155;">${safeEscape(category)}</span></td>
+        <td><strong>${quantity}</strong> ${safeEscape(unit)}</td>
+        <td><small class="text-muted">${safeEscape(purchaseDate)}</small></td>
         <td>${expiryBadge}</td>
-        <td><small>${escapeHtml(storageType)}</small></td>
+        <td><small>${safeEscape(storageType)}</small></td>
         <td>
           ${statusBadge}
           ${scoreHtml}
         </td>
         <td>
           <div class="actions-cell">
-            <a href="food-details.html?id=${item.id}" class="btn btn-secondary btn-sm" title="Inspect Details">
+            <a href="food-details.html?id=${encodeURIComponent(item.id)}" class="btn btn-secondary btn-sm" title="Inspect Details">
               View
             </a>
-            <button class="btn btn-secondary btn-sm" onclick="openEditModal('${item.id}')" title="Edit Item">
-                      Edit
+            <button type="button" class="btn btn-secondary btn-sm btn-edit-item" data-id="${safeEscape(item.id)}" onclick="openEditModal('${escapeJsString(item.id)}')" title="Edit Item">
+              Edit
             </button>
-            <button class="btn btn-danger btn-sm" onclick="confirmDeleteItem('${item.id}', '${escapeHtml(foodName)}')" title="Delete Item">
+            <button type="button" class="btn btn-danger btn-sm btn-delete-item" data-id="${safeEscape(item.id)}" data-name="${safeEscape(foodName)}" onclick="confirmDeleteItem('${escapeJsString(item.id)}', '${escapeJsString(foodName)}')" title="Delete Item">
               Delete
             </button>
           </div>
@@ -860,3 +1040,7 @@ window.openEditModal = openEditModal;
 window.closeEditModal = closeEditModal;
 window.confirmDeleteItem = confirmDeleteItem;
 window.getCategoryEmoji = getCategoryEmoji;
+window.bootInventory = bootInventory;
+window.initInventoryTable = initInventoryTable;
+window.normalizeInventoryResponse = normalizeInventoryResponse;
+window.renderInventoryTable = renderInventoryTable;

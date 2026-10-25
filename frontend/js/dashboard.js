@@ -62,26 +62,71 @@ document.addEventListener("DOMContentLoaded", async () => {
 // 1. Data Ingestion & State Loading
 // =============================================================================
 async function loadDashboardData() {
+  if (!api.isAuthenticated()) {
+    showToast("Please log in to access your dashboard.", "warning");
+    setTimeout(() => {
+      window.location.href = "login.html?redirect=dashboard.html";
+    }, 600);
+    return;
+  }
+
   try {
-    const [stats, items, scanHistory] = await Promise.all([
+    const [statsResult, itemsResult, scanResult] = await Promise.allSettled([
       api.getDashboardStats(),
       api.getInventory({ sort_by: "expiry_date", sort_order: "asc" }),
-      api.getFreshnessHistory({ limit: 6 }).catch(() => [])
+      api.getFreshnessHistory({ limit: 6 })
     ]);
 
-    renderStats(stats);
-    allRecentItems = items || [];
+    const stats = statsResult.status === "fulfilled" ? statsResult.value : null;
+    const items = itemsResult.status === "fulfilled" && Array.isArray(itemsResult.value) ? itemsResult.value : [];
+    const scanHistory = scanResult.status === "fulfilled" && Array.isArray(scanResult.value) ? scanResult.value : [];
+
+    if (statsResult.status === "rejected") {
+      const reason = statsResult.reason;
+      console.warn("Could not load dashboard stats:", reason);
+      if (reason && String(reason.message).includes("Session expired")) return;
+    }
+
+    if (itemsResult.status === "rejected") {
+      const reason = itemsResult.reason;
+      console.warn("Could not load inventory items:", reason);
+      if (reason && String(reason.message).includes("Session expired")) return;
+    }
+
+    if (stats) {
+      renderStats(stats);
+    } else {
+      renderFallbackStats();
+    }
+
+    allRecentItems = items;
     renderRecentTable(allRecentItems.slice(0, 8));
-    renderRecentScans(scanHistory || []);
+    renderRecentScans(scanHistory);
     renderConsumerExpiryAlerts(allRecentItems);
     populateQuickAiItemSelect(allRecentItems);
     populateScannerItemSelect(allRecentItems);
     populateShelfLifePantrySelect(allRecentItems);
-    renderDashboardCharts(stats, allRecentItems);
+
+    if (stats) {
+      renderDashboardCharts(stats, allRecentItems);
+    }
+
     loadConsumerAlerts();
   } catch (error) {
     console.error("Failed to load dashboard:", error);
     showToast("Error loading dashboard metrics: " + error.message, "error");
+    renderRecentTable([]);
+    const catContainer = document.getElementById("category-distribution-container");
+    if (catContainer) {
+      catContainer.innerHTML = "<p style='color:var(--text-muted); padding:16px; text-align:center;'>No category distribution data available yet.</p>";
+    }
+  }
+}
+
+function renderFallbackStats() {
+  const catContainer = document.getElementById("category-distribution-container");
+  if (catContainer) {
+    catContainer.innerHTML = "<p style='color:var(--text-muted); padding:16px; text-align:center;'>No category distribution data available yet. Add items to your inventory to view metrics.</p>";
   }
 }
 

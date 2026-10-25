@@ -182,6 +182,7 @@
 
 .custom-table {
   width: 100%;
+  min-width: 650px;
   border-collapse: collapse;
   text-align: left;
   font-size: 14px;
@@ -196,6 +197,7 @@
   letter-spacing: 0.05em;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 
 .custom-table td {
