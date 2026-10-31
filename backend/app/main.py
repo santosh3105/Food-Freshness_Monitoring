@@ -407,6 +407,11 @@ if settings.FRONTEND_DIR.exists():
             status_code=status.HTTP_204_NO_CONTENT
         )
 
+    @app.get("/robots.txt", include_in_schema=False)
+    async def serve_robots_txt():
+        content = "User-agent: *\nAllow: /\n"
+        return Response(content=content, media_type="text/plain")
+
     @app.get(
         "/",
         tags=["Frontend"],

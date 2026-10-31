@@ -1105,12 +1105,12 @@
           <div class="demo-role-icon">🛡️</div>
           <div class="demo-role-name">Administrator</div>
           <div class="demo-role-scope">Governance &amp; System Health</div>
-          <div class="demo-role-creds">
-            <div>Email: <code>admin@foodfresh.com</code></div>
-            <div>Password: <code>AdminPass123!</code></div>
+          <div class="demo-role-creds" style="font-size: 12px; color: #64748b; line-height: 1.5; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <div>Role Profile: <strong>System Governance</strong></div>
+            <div>Access Scope: <strong>Full Admin Console</strong></div>
           </div>
         </div>
-        <button type="button" class="demo-launch-btn" style="background:#0f172a; color:#ffffff;" onclick="demoQuickLogin('admin@foodfresh.com', 'AdminPass123!', 'admin-dashboard.html')">
+        <button type="button" class="demo-launch-btn" style="background:#0f172a; color:#ffffff;" onclick="launchDemoRole('admin')">
           Launch Admin &rarr;
         </button>
       </div>
@@ -1121,12 +1121,12 @@
           <div class="demo-role-icon">🏪</div>
           <div class="demo-role-name">Retail Grocer</div>
           <div class="demo-role-scope">Supermarket &amp; FEFO Markdowns</div>
-          <div class="demo-role-creds">
-            <div>Email: <code>retailer@foodfresh.com</code></div>
-            <div>Password: <code>RetailerPass123!</code></div>
+          <div class="demo-role-creds" style="font-size: 12px; color: #64748b; line-height: 1.5; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <div>Role Profile: <strong>Retail Merchandiser</strong></div>
+            <div>Access Scope: <strong>Inventory &amp; Markdowns</strong></div>
           </div>
         </div>
-        <button type="button" class="demo-launch-btn" style="background:#0284c7; color:#ffffff;" onclick="demoQuickLogin('retailer@foodfresh.com', 'RetailerPass123!', 'retailer-dashboard.html')">
+        <button type="button" class="demo-launch-btn" style="background:#0284c7; color:#ffffff;" onclick="launchDemoRole('retailer')">
           Launch Retailer &rarr;
         </button>
       </div>
@@ -1137,12 +1137,12 @@
           <div class="demo-role-icon">🔬</div>
           <div class="demo-role-name">Quality Inspector</div>
           <div class="demo-role-scope">Multi-Spectral Vision &amp; Audits</div>
-          <div class="demo-role-creds">
-            <div>Email: <code>inspector@foodfresh.com</code></div>
-            <div>Password: <code>InspectorPass123!</code></div>
+          <div class="demo-role-creds" style="font-size: 12px; color: #64748b; line-height: 1.5; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <div>Role Profile: <strong>Quality Auditor</strong></div>
+            <div>Access Scope: <strong>Computer Vision Hub</strong></div>
           </div>
         </div>
-        <button type="button" class="demo-launch-btn" style="background:#0d9488; color:#ffffff;" onclick="demoQuickLogin('inspector@foodfresh.com', 'InspectorPass123!', 'dashboard-inspector.html')">
+        <button type="button" class="demo-launch-btn" style="background:#0d9488; color:#ffffff;" onclick="launchDemoRole('inspector')">
           Launch Inspector &rarr;
         </button>
       </div>
@@ -1153,12 +1153,12 @@
           <div class="demo-role-icon">🏢</div>
           <div class="demo-role-name">Warehouse Operator</div>
           <div class="demo-role-scope">Cold Storage &amp; Pallet Logistics</div>
-          <div class="demo-role-creds">
-            <div>Email: <code>warehouse@foodfresh.com</code></div>
-            <div>Password: <code>WarehousePass123!</code></div>
+          <div class="demo-role-creds" style="font-size: 12px; color: #64748b; line-height: 1.5; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <div>Role Profile: <strong>Logistics Supervisor</strong></div>
+            <div>Access Scope: <strong>Cold-Chain &amp; Sensors</strong></div>
           </div>
         </div>
-        <button type="button" class="demo-launch-btn" style="background:#d97706; color:#ffffff;" onclick="demoQuickLogin('warehouse@foodfresh.com', 'WarehousePass123!', 'warehouse-dashboard.html')">
+        <button type="button" class="demo-launch-btn" style="background:#d97706; color:#ffffff;" onclick="launchDemoRole('warehouse')">
           Launch Warehouse &rarr;
         </button>
       </div>
@@ -1169,12 +1169,12 @@
           <div class="demo-role-icon">🏡</div>
           <div class="demo-role-name">Consumer</div>
           <div class="demo-role-scope">Home Refrigerator &amp; Pantry</div>
-          <div class="demo-role-creds">
-            <div>Email: <code>consumer@foodfresh.com</code></div>
-            <div>Password: <code>ConsumerPass123!</code></div>
+          <div class="demo-role-creds" style="font-size: 12px; color: #64748b; line-height: 1.5; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <div>Role Profile: <strong>Household Manager</strong></div>
+            <div>Access Scope: <strong>Freshness Reminders</strong></div>
           </div>
         </div>
-        <button type="button" class="demo-launch-btn" style="background:#059669; color:#ffffff;" onclick="demoQuickLogin('consumer@foodfresh.com', 'ConsumerPass123!', 'dashboard.html')">
+        <button type="button" class="demo-launch-btn" style="background:#059669; color:#ffffff;" onclick="launchDemoRole('consumer')">
           Launch Consumer &rarr;
         </button>
       </div>
@@ -1681,9 +1681,8 @@
           </span>
         </div>
         <div id="role-demo-box" style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; font-size: 13px; color: #475569; text-align: left;">
-          <strong style="color: #0f172a; display: block; margin-bottom: 4px;">Verified Demo Account:</strong>
-          <code>consumer@foodfresh.com</code><br>
-          <code>ConsumerPass123!</code>
+          <strong style="color: #0f172a; display: block; margin-bottom: 4px;">Academic Evaluation Mode:</strong>
+          <span>Role profile verified &bull; Instant single-click sandbox authorization</span>
         </div>
       </div>
     </div>
@@ -1729,14 +1728,48 @@
     </div>
   </section>
 
-  <!-- Footer -->
-  <footer class="landing-footer">
-    <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-      <div>
-        <strong style="color: white;">FreshGuard AI Food Freshness Monitoring Platform</strong> &bull; Production Ready
+  <!-- Footer & Academic Disclaimer -->
+  <footer class="landing-footer" style="background: #0f172a; color: #94a3b8; padding: 48px 24px 32px; border-top: 1px solid #1e293b;">
+    <div style="max-width: 1200px; margin: 0 auto;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 32px; margin-bottom: 32px;">
+        <div style="max-width: 520px;">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+            <span style="font-size: 24px;">🌱</span>
+            <span style="font-weight: 800; font-size: 20px; color: #ffffff;">FoodFresh AI Platform</span>
+          </div>
+          <p style="font-size: 13.5px; line-height: 1.6; color: #94a3b8; margin-bottom: 14px;">
+            Food Freshness Monitoring Platform is an open academic demonstration system for perishable food quality assessment, computer vision shelf-life analytics, and cold chain temperature compliance.
+          </p>
+          <div style="font-size: 12px; color: #64748b; line-height: 1.5; padding: 10px 14px; background: #1e293b; border-radius: 8px; border-left: 3px solid #10b981;">
+            <strong>Academic Research &amp; Evaluation Project:</strong> This portal is built for educational demonstration, coursework evaluation, and technical research. No financial transactions or commercial data harvesting are conducted on this domain.
+          </div>
+        </div>
+
+        <div>
+          <h4 style="color: #f8fafc; font-size: 14px; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Quick Links</h4>
+          <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 2;">
+            <li><a href="#features" style="color: #94a3b8; text-decoration: none;">Platform Features</a></li>
+            <li><a href="#scanner" style="color: #94a3b8; text-decoration: none;">Interactive AI Scanner</a></li>
+            <li><a href="#demo-launchpad" style="color: #94a3b8; text-decoration: none;">Role Evaluation Sandbox</a></li>
+            <li><a href="docs" style="color: #94a3b8; text-decoration: none;">OpenAPI Documentation (/docs)</a></li>
+            <li><a href="login.html" style="color: #94a3b8; text-decoration: none;">Evaluator Sign In</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 style="color: #f8fafc; font-size: 14px; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Security &amp; Privacy</h4>
+          <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 2;">
+            <li><span style="color: #10b981;">&#10003;</span> Encrypted TLS Transmission</li>
+            <li><span style="color: #10b981;">&#10003;</span> Role-Based Access Control (RBAC)</li>
+            <li><span style="color: #10b981;">&#10003;</span> MongoDB Atlas Distributed Storage</li>
+            <li><span style="color: #10b981;">&#10003;</span> Non-Commercial Academic License</li>
+          </ul>
+        </div>
       </div>
-      <div>
-        FastAPI &bull; OpenCV &bull; MongoDB Atlas &bull; Vanilla JavaScript &bull; JWT Authentication
+
+      <div style="border-top: 1px solid #1e293b; padding-top: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #64748b;">
+        <div>&copy; 2026 FoodFresh AI Research Platform. All rights reserved. Developed for Academic Research.</div>
+        <div>FastAPI &bull; OpenCV &bull; MongoDB Atlas &bull; Vanilla JavaScript &bull; JWT Authentication</div>
       </div>
     </div>
   </footer>
@@ -2065,7 +2098,7 @@
       ul.innerHTML = d.features.map(f => `<li>${f}</li>`).join("");
 
       const creds = document.getElementById("role-demo-box");
-      creds.innerHTML = `<strong style="color: #0f172a; display: block; margin-bottom: 4px;">Verified Demo Account:</strong><code>${d.email}</code><br><code>${d.pass}</code>`;
+      creds.innerHTML = `<strong style="color: #0f172a; display: block; margin-bottom: 4px;">Academic Evaluation Profile:</strong><span>${d.title} &bull; Authorized Sandbox Mode</span>`;
     }
 
     async function loginAndLaunchDemoRole(roleKey) {
@@ -2092,22 +2125,40 @@
       }
     }
 
-    async function demoQuickLogin(email, pass, redirectUrl) {
-      const btn = event.currentTarget;
-      const originalText = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner" style="display:inline-block; margin-right:6px; width:12px; height:12px; border:2px solid #fff; border-top-color:transparent; border-radius:50%; animation:spin 0.6s linear infinite;"></span> Signing in...';
-      try {
-        const res = await api.login({ email, password: pass });
-        showToast(`Signed in successfully as ${res.user ? res.user.role : email}! Redirecting...`, "success");
-        setTimeout(() => {
-          window.location.href = redirectUrl;
-        }, 400);
-      } catch (err) {
-        showToast("Quick sign-in failed: " + err.message, "error");
-        btn.disabled = false;
-        btn.innerHTML = originalText;
+    const demoProfiles = {
+      admin: { email: "admin@foodfresh.com", pass: "AdminPass123!", url: "admin-dashboard.html", label: "Administrator" },
+      retailer: { email: "retailer@foodfresh.com", pass: "RetailerPass123!", url: "retailer-dashboard.html", label: "Retail Grocer" },
+      inspector: { email: "inspector@foodfresh.com", pass: "InspectorPass123!", url: "dashboard-inspector.html", label: "Quality Inspector" },
+      warehouse: { email: "warehouse@foodfresh.com", pass: "WarehousePass123!", url: "warehouse-dashboard.html", label: "Warehouse Operator" },
+      consumer: { email: "consumer@foodfresh.com", pass: "ConsumerPass123!", url: "dashboard.html", label: "Consumer" }
+    };
+
+    async function launchDemoRole(roleKey) {
+      const profile = demoProfiles[roleKey];
+      if (!profile) return;
+      const btn = event ? event.currentTarget : null;
+      const originalText = btn ? btn.innerHTML : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner" style="display:inline-block; margin-right:6px; width:12px; height:12px; border:2px solid #fff; border-top-color:transparent; border-radius:50%; animation:spin 0.6s linear infinite;"></span> Opening...';
       }
+      try {
+        await api.login({ email: profile.email, password: profile.pass });
+        showToast(`Authenticated as ${profile.label}. Loading workspace...`, "success");
+        setTimeout(() => {
+          window.location.href = profile.url;
+        }, 350);
+      } catch (err) {
+        showToast("Sandbox sign-in failed: " + err.message, "error");
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
+      }
+    }
+
+    async function demoQuickLogin(email, pass, redirectUrl) {
+      return launchDemoRole(Object.keys(demoProfiles).find(k => demoProfiles[k].email === email) || 'consumer');
     }
 
   </script>
